@@ -70,6 +70,9 @@ struct Rng final {
 
 #include <gmpxx.h>
 
+template<std::size_t S>
+using static_mpz_storage_t = std::array<mp_limb_t, S>;
+
 struct static_mpz_t {
     int _mp_alloc     = 0;
     int _mp_size      = 0;
@@ -77,24 +80,32 @@ struct static_mpz_t {
 
     static_mpz_t ( ) noexcept {}
     template<std::size_t S>
-    static_mpz_t ( std::array<mp_limb_t, S> & array_ ) noexcept : _mp_alloc ( S ), _mp_d ( array_.data ( ) ) {}
+    static_mpz_t ( static_mpz_storage_t<S> & array_ ) noexcept : _mp_alloc ( S ), _mp_d ( array_.data ( ) ) {}
 
-    static_mpz_t & operator+= ( const static_mpz_t & rhs_ ) noexcept {
+    [[maybe_unused]] static_mpz_t & operator+= ( const static_mpz_t & rhs_ ) noexcept {
+        assert ( _mp_d );
+        assert ( rhs_._mp_d );
         mpz_add ( reinterpret_cast<mpz_ptr> ( this ), reinterpret_cast<mpz_srcptr> ( this ),
                   reinterpret_cast<mpz_srcptr> ( &rhs_ ) );
         return *this;
     }
-    static_mpz_t & operator-= ( const static_mpz_t & rhs_ ) noexcept {
+    [[maybe_unused]] static_mpz_t & operator-= ( const static_mpz_t & rhs_ ) noexcept {
+        assert ( _mp_d );
+        assert ( rhs_._mp_d );
         mpz_sub ( reinterpret_cast<mpz_ptr> ( this ), reinterpret_cast<mpz_srcptr> ( this ),
                   reinterpret_cast<mpz_srcptr> ( &rhs_ ) );
         return *this;
     }
-    static_mpz_t & operator*= ( const static_mpz_t & rhs_ ) noexcept {
+    [[maybe_unused]] static_mpz_t & operator*= ( const static_mpz_t & rhs_ ) noexcept {
+        assert ( _mp_d );
+        assert ( rhs_._mp_d );
         mpz_mul ( reinterpret_cast<mpz_ptr> ( this ), reinterpret_cast<mpz_srcptr> ( this ),
                   reinterpret_cast<mpz_srcptr> ( &rhs_ ) );
         return *this;
     }
-    static_mpz_t & operator/= ( const static_mpz_t & rhs_ ) noexcept {
+    [[maybe_unused]] static_mpz_t & operator/= ( const static_mpz_t & rhs_ ) noexcept {
+        assert ( _mp_d );
+        assert ( rhs_._mp_d );
         mpz_div ( reinterpret_cast<mpz_ptr> ( this ), reinterpret_cast<mpz_srcptr> ( this ),
                   reinterpret_cast<mpz_srcptr> ( &rhs_ ) );
         return *this;
@@ -105,23 +116,31 @@ struct static_mpz_t {
 
     template<typename Generator>
     void randomize ( Generator & gen_, const int size_ = 0 ) noexcept {
+        assert ( _mp_d );
         assert ( size_ <= _mp_alloc );
         _mp_size = size_ ? size_ : _mp_alloc;
         std::generate ( std::execution::par_unseq, _mp_d, _mp_d + _mp_size,
                         [&] ( ) { return sax::uniform_int_distribution<mp_limb_t> ( ) ( gen_ ); } );
     }
 
-    void make_odd ( ) noexcept { *( ( std::uint8_t * ) _mp_d ) |= 0b0000'0001; }
-    void make_even ( ) noexcept { *( ( std::uint8_t * ) _mp_d ) &= 0b1111'1110; }
+    void make_odd ( ) noexcept {
+        assert ( size_ );
+        *reinterpret_cast<std::uint8_t *> ( _mp_d ) |= 0b0000'0001;
+    }
+    void make_even ( ) noexcept {
+        assert ( size_ );
+        *reinterpret_cast<std::uint8_t *> ( _mp_d ) &= 0b1111'1110;
+    }
 
-    void resize ( const int size_ ) noexcept { _mp_size = size_; }
+    void resize ( const int size_ ) noexcept {
+        assert ( _mp_d );
+        assert ( size_ <= _mp_alloc );
+        _mp_size = size_;
+    }
 
-    mpz_ptr get_mpz_t ( ) noexcept { return reinterpret_cast<mpz_ptr> ( this ); }
-    mpz_srcptr get_mpz_t ( ) const noexcept { return reinterpret_cast<mpz_srcptr> ( this ); }
+    [[nodiscard]] mpz_ptr get_mpz_t ( ) noexcept { return reinterpret_cast<mpz_ptr> ( this ); }
+    [[nodiscard]] mpz_srcptr get_mpz_t ( ) const noexcept { return reinterpret_cast<mpz_srcptr> ( this ); }
 };
-
-template<std::size_t S>
-using static_mpz_storage_t = std::array<mp_limb_t, S>;
 
 int main ( ) {
 
@@ -136,7 +155,7 @@ int main ( ) {
     static_mpz_storage_t<16> a2{};
     static_mpz_t m2 ( a2 );
     m2.randomize ( gen, 8 );
-    m1.make_odd ( );
+    m2.make_odd ( );
     std::cout << m2.get_mpz_t ( ) << nl;
 
     m2 *= m1;
