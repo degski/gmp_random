@@ -124,11 +124,11 @@ struct static_mpz_t {
     }
 
     void make_odd ( ) noexcept {
-        assert ( size_ );
+        assert ( _mp_size );
         *reinterpret_cast<std::uint8_t *> ( _mp_d ) |= 0b0000'0001;
     }
     void make_even ( ) noexcept {
-        assert ( size_ );
+        assert ( _mp_size );
         *reinterpret_cast<std::uint8_t *> ( _mp_d ) &= 0b1111'1110;
     }
 
