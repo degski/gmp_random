@@ -74,8 +74,7 @@ template<std::size_t S>
 using static_mpz_storage_t = std::array<mp_limb_t, S>;
 
 struct static_mpz_t {
-    int _mp_alloc;
-    int _mp_size;
+    int _mp_alloc, _mp_size;
     mp_limb_t * _mp_d;
 
     static_mpz_t ( int a_ = 0, int s_ = 0, mp_limb_t * m_ = nullptr ) noexcept :
@@ -142,7 +141,8 @@ struct static_mpz_t {
     [[nodiscard]] mpz_ptr get_mpz_t ( ) noexcept { return reinterpret_cast<mpz_ptr> ( this ); }
     [[nodiscard]] mpz_srcptr get_mpz_t ( ) const noexcept { return reinterpret_cast<mpz_srcptr> ( this ); }
 
-    static_mpz_t high_mpz ( ) noexcept { return { -1, _mp_size / 2, _mp_d + _mp_size / 2 }; }
+    [[nodiscard]] static_mpz_t low_view ( ) noexcept { return { -1, _mp_size / 2, _mp_d }; }
+    [[nodiscard]] static_mpz_t high_view ( ) noexcept { return { -1, _mp_size / 2, _mp_d + _mp_size / 2 }; }
 };
 
 int main ( ) {
