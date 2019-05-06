@@ -74,11 +74,12 @@ template<std::size_t S>
 using static_mpz_storage_t = std::array<mp_limb_t, S>;
 
 struct static_mpz_t {
-    int _mp_alloc     = 0;
-    int _mp_size      = 0;
-    mp_limb_t * _mp_d = nullptr;
+    int _mp_alloc;
+    int _mp_size;
+    mp_limb_t * _mp_d;
 
-    static_mpz_t ( ) noexcept {}
+    static_mpz_t ( int a_ = 0, int s_ = 0, mp_limb_t * m_ = nullptr ) noexcept :
+        _mp_alloc ( std::move ( a_ ) ), _mp_size ( std::move ( s_ ) ), _mp_d ( std::move ( m_ ) ) {}
     template<std::size_t S>
     static_mpz_t ( static_mpz_storage_t<S> & array_ ) noexcept : _mp_alloc ( S ), _mp_d ( array_.data ( ) ) {}
 
@@ -140,6 +141,8 @@ struct static_mpz_t {
 
     [[nodiscard]] mpz_ptr get_mpz_t ( ) noexcept { return reinterpret_cast<mpz_ptr> ( this ); }
     [[nodiscard]] mpz_srcptr get_mpz_t ( ) const noexcept { return reinterpret_cast<mpz_srcptr> ( this ); }
+
+    static_mpz_t high_mpz ( ) noexcept { return { -1, _mp_size / 2, _mp_d + _mp_size / 2 }; }
 };
 
 int main ( ) {
@@ -159,15 +162,6 @@ int main ( ) {
     std::cout << m2.get_mpz_t ( ) << nl;
 
     m2 *= m1;
-    std::cout << m2.get_mpz_t ( ) << nl;
-
-    m2.resize ( 8 );
-    std::cout << m2.get_mpz_t ( ) << nl;
-
-    m2 *= m1;
-    std::cout << m2.get_mpz_t ( ) << nl;
-
-    m2.resize ( 8 );
     std::cout << m2.get_mpz_t ( ) << nl;
 
     return EXIT_SUCCESS;
