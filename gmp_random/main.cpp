@@ -106,6 +106,7 @@ struct static_mpz_t {
     [[maybe_unused]] static_mpz_t & operator/= ( const static_mpz_t & rhs_ ) noexcept {
         assert ( _mp_d );
         assert ( rhs_._mp_d );
+        assert ( rhs_._mp_d[ 0 ] );
         mpz_div ( reinterpret_cast<mpz_ptr> ( this ), reinterpret_cast<mpz_srcptr> ( this ),
                   reinterpret_cast<mpz_srcptr> ( &rhs_ ) );
         return *this;
