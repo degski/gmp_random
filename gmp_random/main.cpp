@@ -206,31 +206,29 @@ using mcg128_fast = lehmer_detail::mcg<uint64_t, __uint128_t, 0xda942042e4dd58b5
 
 */
 
+template<std::size_t S>
 struct GMPRng {
 
-    static_mpz_storage_t<16> _state_storage_0, _state_storage_1;
-    static_mpz_storage_t<8> _multiplier_storage;
-    static_mpz_t _state, _multiplier;
-    mp_limb_t * _storage[ 2 ];
+    static_assert ( S % 2 == 0, "size has to be even" );
+
+    static_mpz_storage_t<2 * S> _state_storage_0, _state_storage_1;
+    static_mpz_storage_t<S> _multiplier_storage;
+    static_mpz_t _state;
+    mp_limb_t * _destination;
 
     GMPRng ( ) noexcept :
-        _state ( _state_storage_0 ),
-        _multiplier ( _multiplier_storage ), _storage{ _state_storage_0.data ( ), _state_storage_1.data ( ) } {
-        _state.randomize ( Rng::gen ( ), 8 );
+        _state ( _state_storage_0 ), _destination ( _state_storage_1.data ( ) ) {
+        _state.randomize ( Rng::gen ( ), S );
         _state.make_odd ( );
-        _multiplier.randomize ( Rng::gen ( ) );
-        _multiplier.make_odd ( );
+        static_mpz_t multiplier ( _multiplier_storage );
+        multiplier.randomize ( Rng::gen ( ) );
+        multiplier.make_odd ( );
     }
 
-    void advance ( ) {
-        mpn_mul_n ( _storage[ 1 ], _storage[ 0 ], _multiplier_storage.data ( ), 8 );
-        std::swap ( _storage[ 0 ], _storage[ 1 ] );
-    }
-
-    static_mpz_t & operator( ) ( ) {
-        advance ( );
-        std::copy_n ( _storage[ 0 ] + 7, 8, _storage[ 0 ] );
-        _state._mp_d = _storage[ 0 ];
+    static_mpz_t & operator( ) ( ) noexcept {
+        mpn_mul_n ( _destination, _state._mp_d, _multiplier_storage.data ( ), S );
+        std::swap ( _destination, _state._mp_d );
+        std::copy_n ( _state._mp_d + ( S - 1 ), S, _state._mp_d );
         return _state;
     }
 };
@@ -238,7 +236,7 @@ struct GMPRng {
 
 int main ( ) {
 
-    GMPRng prng;
+    GMPRng<4> prng;
 
     for ( int i = 0; i < 1000; ++i )
         std::cout << prng ( ).get_mpz_t ( ) << nl;
