@@ -139,6 +139,13 @@ struct static_mpz_t {
         _mp_size = size_;
     }
 
+    void shift_high ( ) noexcept {
+        assert ( _mp_alloc == _mp_size );
+        assert ( _mp_alloc % 2 == 0 );
+        _mp_size /= 2;
+        std::memcpy ( _mp_d, _mp_d + _mp_size, _mp_size * sizeof ( mp_limb_t ) );
+    }
+
     [[nodiscard]] mpz_ptr get_mpz_t ( ) noexcept { return reinterpret_cast<mpz_ptr> ( this ); }
     [[nodiscard]] mpz_srcptr get_mpz_t ( ) const noexcept { return reinterpret_cast<mpz_srcptr> ( this ); }
 
@@ -146,24 +153,95 @@ struct static_mpz_t {
     [[nodiscard]] static_mpz_t high_view ( ) noexcept { return { -1, _mp_size / 2, _mp_d + _mp_size / 2 }; }
 };
 
+void mul ( static_mpz_t & d_, static_mpz_t & s1_, static_mpz_t & s2_ ) noexcept {
+    assert ( s1_._mp_size == s2_._mp_size );
+    assert ( d_._mp_alloc == 2 * s1_._mp_size );
+    d_._mp_size = d_._mp_alloc;
+    mpn_mul_n ( d_._mp_d, s1_._mp_d, s2_._mp_d, s1_._mp_size );
+}
+
+/*
+
+namespace lehmer_detail {
+
+template<typename rtype, typename stype, auto multiplier>
+class mcg {
+    stype state_;
+    static constexpr auto MCG_MULT = multiplier;
+
+    static constexpr unsigned int STYPE_BITS = 8 * sizeof ( stype );
+    static constexpr unsigned int RTYPE_BITS = 8 * sizeof ( rtype );
+
+    public:
+    using result_type = rtype;
+    static constexpr result_type min ( ) { return result_type ( 0 ); }
+    static constexpr result_type max ( ) { return ~result_type ( 0 ); }
+
+    mcg ( stype state = stype ( 0x9f57c403d06c42fcUL ) ) : state_ ( state | 1 ) {
+        // Nothing (else) to do.
+    }
+
+    void advance ( ) { state_ *= MCG_MULT; }
+
+    result_type operator( ) ( ) {
+        advance ( );
+        return result_type ( state_ >> ( STYPE_BITS - RTYPE_BITS ) );
+    }
+
+    bool operator== ( const mcg & rhs ) { return ( state_ == rhs.state_ ); }
+
+    bool operator!= ( const mcg & rhs ) { return !operator== ( rhs ); }
+
+    // Not (yet) implemented:
+    //   - arbitrary jumpahead (see PCG code for an implementation)
+    //   - I/O
+    //   - Seeding from a seed_seq.
+};
+
+} // namespace lehmer_detail
+
+using mcg128 = lehmer_detail::mcg<uint64_t, __uint128_t, ( __uint128_t ( 5017888479014934897ULL ) << 64 ) + 2747143273072462557ULL>;
+
+using mcg128_fast = lehmer_detail::mcg<uint64_t, __uint128_t, 0xda942042e4dd58b5ULL>;
+
+*/
+
+struct GMPRng {
+
+    static_mpz_storage_t<16> _state_storage_0, _state_storage_1;
+    static_mpz_storage_t<8> _multiplier_storage;
+    static_mpz_t _state, _multiplier;
+    mp_limb_t * _storage[ 2 ];
+
+    GMPRng ( ) noexcept :
+        _state ( _state_storage_0 ),
+        _multiplier ( _multiplier_storage ), _storage{ _state_storage_0.data ( ), _state_storage_1.data ( ) } {
+        _state.randomize ( Rng::gen ( ), 8 );
+        _state.make_odd ( );
+        _multiplier.randomize ( Rng::gen ( ) );
+        _multiplier.make_odd ( );
+    }
+
+    void advance ( ) {
+        mpn_mul_n ( _storage[ 1 ], _storage[ 0 ], _multiplier_storage.data ( ), 8 );
+        std::swap ( _storage[ 0 ], _storage[ 1 ] );
+    }
+
+    static_mpz_t & operator( ) ( ) {
+        advance ( );
+        std::copy_n ( _storage[ 0 ] + 7, 8, _storage[ 0 ] );
+        _state._mp_d = _storage[ 0 ];
+        return _state;
+    }
+};
+
+
 int main ( ) {
 
-    auto gen = Rng::gen ( );
+    GMPRng prng;
 
-    static_mpz_storage_t<8> a1{};
-    static_mpz_t m1 ( a1 );
-    m1.randomize ( gen );
-    m1.make_odd ( );
-    std::cout << m1.get_mpz_t ( ) << nl;
-
-    static_mpz_storage_t<16> a2{};
-    static_mpz_t m2 ( a2 );
-    m2.randomize ( gen, 8 );
-    m2.make_odd ( );
-    std::cout << m2.get_mpz_t ( ) << nl;
-
-    m2 *= m1;
-    std::cout << m2.get_mpz_t ( ) << nl;
+    for ( int i = 0; i < 1000; ++i )
+        std::cout << prng ( ).get_mpz_t ( ) << nl;
 
     return EXIT_SUCCESS;
 }
