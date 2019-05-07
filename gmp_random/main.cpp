@@ -207,6 +207,30 @@ using mcg128_fast = lehmer_detail::mcg<uint64_t, __uint128_t, 0xda942042e4dd58b5
 */
 
 template<std::size_t S>
+struct GMPRng1 {
+
+    static_assert ( S % 2 == 0, "size has to be even" );
+
+    static_mpz_storage_t<2 * S> _destination_storage;
+    static_mpz_storage_t<S> _state_storage, _multiplier_storage;
+    static_mpz_t _state;
+
+    GMPRng1 ( ) noexcept : _state ( _state_storage ), _destination ( _state_storage_1.data ( ) ) {
+        _state.randomize ( Rng::gen ( ) );
+        _state.make_odd ( );
+        static_mpz_t multiplier ( _multiplier_storage );
+        multiplier.randomize ( Rng::gen ( ) );
+        multiplier.make_odd ( );
+    }
+
+    static_mpz_t & operator( ) ( ) noexcept {
+        mpn_mul_n ( _destination_storage.data ( ), _state._mp_d, _multiplier_storage.data ( ), S );
+        std::copy_n ( _destination_storage.data ( ) + ( S - 1 ), S, _state._mp_d );
+        return _state;
+    }
+};
+
+template<std::size_t S>
 struct GMPRng {
 
     static_assert ( S % 2 == 0, "size has to be even" );
@@ -234,9 +258,37 @@ struct GMPRng {
 };
 
 
+
+template<std::size_t S>
+struct GMPRng2 {
+
+    static_assert ( S % 2 == 0, "size has to be even" );
+
+    static_mpz_storage_t<2 * S> _state_storage_0, _state_storage_1;
+    static_mpz_storage_t<S> _multiplier_storage;
+    static_mpz_t _state;
+    mp_limb_t * _destination;
+
+    GMPRng2 ( ) noexcept : _state ( _state_storage_0 ), _destination ( _state_storage_1.data ( ) + ( S - 1 ) ) {
+        _state._mp_d += ( S - 1 );
+        _state.randomize ( Rng::gen ( ), S );
+        _state.make_odd ( );
+        static_mpz_t multiplier ( _multiplier_storage );
+        multiplier.randomize ( Rng::gen ( ) );
+        multiplier.make_odd ( );
+    }
+
+    static_mpz_t & operator( ) ( ) noexcept {
+        mpn_mul_n ( _destination - ( S - 1 ), _state._mp_d, _multiplier_storage.data ( ), S );
+        std::swap ( _destination, _state._mp_d );
+        return _state;
+    }
+};
+
+
 int main ( ) {
 
-    GMPRng<4> prng;
+    GMPRng2<16> prng;
 
     for ( int i = 0; i < 1000; ++i )
         std::cout << prng ( ).get_mpz_t ( ) << nl;
