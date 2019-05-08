@@ -40,6 +40,8 @@
 #include <type_traits>
 #include <vector>
 
+#include <plf/plf_nanotimer.h>
+
 #include <sax/prng.hpp>
 #include <sax/singleton.hpp>
 #include <sax/uniform_int_distribution.hpp>
@@ -80,9 +82,11 @@ struct static_mpz_t {
     static_mpz_t ( int a_ = 0, int s_ = 0, mp_limb_t * m_ = nullptr ) noexcept :
         _mp_alloc ( std::move ( a_ ) ), _mp_size ( std::move ( s_ ) ), _mp_d ( std::move ( m_ ) ) {}
     template<std::size_t S>
-    static_mpz_t ( static_mpz_storage_t<S> & array_ ) noexcept : _mp_alloc ( S ), _mp_d ( array_.data ( ) ) {}
+    static_mpz_t ( static_mpz_storage_t<S> & array_ ) noexcept :
+        _mp_alloc ( S ), _mp_d ( array_.data ( ) ){}
 
-    [[maybe_unused]] static_mpz_t & operator+= ( const static_mpz_t & rhs_ ) noexcept {
+                                 [ [maybe_unused] ] static_mpz_t
+                             & operator+= ( const static_mpz_t & rhs_ ) noexcept {
         assert ( _mp_d );
         assert ( rhs_._mp_d );
         mpz_add ( reinterpret_cast<mpz_ptr> ( this ), reinterpret_cast<mpz_srcptr> ( this ),
@@ -121,7 +125,7 @@ struct static_mpz_t {
         assert ( size_ <= _mp_alloc );
         _mp_size = size_ ? size_ : _mp_alloc;
         std::generate ( std::execution::par_unseq, _mp_d, _mp_d + _mp_size,
-                        [&] ( ) { return sax::uniform_int_distribution<mp_limb_t> ( ) ( gen_ ); } );
+                        [&]( ) { return sax::uniform_int_distribution<mp_limb_t> ( ) ( gen_ ); } );
     }
 
     void make_odd ( ) noexcept {
@@ -205,7 +209,7 @@ using mcg128 = lehmer_detail::mcg<uint64_t, __uint128_t, ( __uint128_t ( 5017888
 using mcg128_fast = lehmer_detail::mcg<uint64_t, __uint128_t, 0xda942042e4dd58b5ULL>;
 
 */
-
+/*
 template<std::size_t S>
 struct GMPRng1 {
 
@@ -229,7 +233,7 @@ struct GMPRng1 {
         return _state;
     }
 };
-
+*/
 template<std::size_t S>
 struct GMPRng {
 
@@ -240,8 +244,7 @@ struct GMPRng {
     static_mpz_t _state;
     mp_limb_t * _destination;
 
-    GMPRng ( ) noexcept :
-        _state ( _state_storage_0 ), _destination ( _state_storage_1.data ( ) ) {
+    GMPRng ( ) noexcept : _state ( _state_storage_0 ), _destination ( _state_storage_1.data ( ) ) {
         _state.randomize ( Rng::gen ( ), S );
         _state.make_odd ( );
         static_mpz_t multiplier ( _multiplier_storage );
@@ -257,17 +260,20 @@ struct GMPRng {
     }
 };
 
-
-
 template<std::size_t S>
 struct GMPRng2 {
 
     static_assert ( S % 2 == 0, "size has to be even" );
 
+    using result_type = std::uint64_t;
+    [[nodiscard]] static constexpr result_type min ( ) noexcept { return result_type ( 0 ); }
+    [[nodiscard]] static constexpr result_type max ( ) noexcept { return ~result_type ( 0 ); }
+
     static_mpz_storage_t<2 * S> _state_storage_0, _state_storage_1;
     static_mpz_storage_t<S> _multiplier_storage;
     static_mpz_t _state;
     mp_limb_t * _destination;
+    int _limb = 0;
 
     GMPRng2 ( ) noexcept : _state ( _state_storage_0 ), _destination ( _state_storage_1.data ( ) + ( S - 1 ) ) {
         _state._mp_d += ( S - 1 );
@@ -278,20 +284,41 @@ struct GMPRng2 {
         multiplier.make_odd ( );
     }
 
-    static_mpz_t & operator( ) ( ) noexcept {
+    inline void advance ( ) noexcept {
         mpn_mul_n ( _destination - ( S - 1 ), _state._mp_d, _multiplier_storage.data ( ), S );
         std::swap ( _destination, _state._mp_d );
-        return _state;
+        _limb = 0;
     }
-};
 
+    [[nodiscard]] result_type operator( ) ( ) noexcept {
+        if ( _limb == S )
+            advance ( );
+        return _state._mp_d[ _limb++ ];
+    }
+
+    [[nodiscard]] bool operator== ( const GMPRng2 & rhs_ ) noexcept { return ( _state == rhs_._state ); }
+    [[nodiscard]] bool operator!= ( const GMPRng2 & rhs_ ) noexcept { return not operator== ( rhs_ ); }
+};
 
 int main ( ) {
 
-    GMPRng2<16> prng;
+    GMPRng2<4> prng;
 
-    for ( int i = 0; i < 1000; ++i )
-        std::cout << prng ( ).get_mpz_t ( ) << nl;
+    std::uint64_t x = 0, y = 0;
+
+    plf::nanotimer timer;
+
+    timer.start ( );
+
+    for ( int i = 0; i < 1'000'000'000; ++i ) {
+        x += Rng::gen ( ) ( );
+        ++y;
+    }
+
+    std::uint64_t t = ( std::uint64_t ) timer.get_elapsed_ms ( );
+
+    std::cout << x << ' ' << y << nl;
+    std::cout << t << nl;
 
     return EXIT_SUCCESS;
 }
